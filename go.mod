@@ -5,11 +5,11 @@ go 1.18
 require (
 	github.com/fluent/fluent-logger-golang v1.8.0
 	github.com/google/uuid v1.3.0
-	github.com/gorilla/mux v1.8.0
-	github.com/gorilla/websocket v1.4.2
+	// github.com/gorilla/mux v1.8.0
+	// github.com/gorilla/websocket v1.4.2
 	github.com/onsi/ginkgo/v2 v2.9.7
 	github.com/onsi/gomega v1.27.8
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.4
 	github.com/tinylib/msgp v1.1.8
 )
 
