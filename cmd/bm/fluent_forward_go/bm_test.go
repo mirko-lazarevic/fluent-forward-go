@@ -126,12 +126,13 @@ func Benchmark_Fluent_Forward_Go_Bytes(b *testing.B) {
 	}
 }
 
-func Benchmark_Fluent_Forward_Go_BytesAck(b *testing.B) {
+func Benchmark_Fluent_Forward_Go_Bytes_Buffer(b *testing.B) {
 	tagVar := "foo"
 
-	c := client.New(client.ConnectionOptions{
-		RequireAck:        true,
-		ConnectionTimeout: 3 * time.Second,
+	c := client.NewBufferedClient(client.BufferedClientConnectionOptions{
+		ConnectionOptions: client.ConnectionOptions{
+			ConnectionTimeout: 3 * time.Second,
+		},
 	})
 
 	err := c.Connect()
@@ -140,11 +141,11 @@ func Benchmark_Fluent_Forward_Go_BytesAck(b *testing.B) {
 	}
 
 	defer c.Disconnect()
+	defer c.Stop()
 
 	record := bm.MakeRecord(12)
 	mne := protocol.NewMessage(tagVar, record)
 
-	mne.Chunk()
 	bits, _ := mne.MarshalMsg(nil)
 
 	b.ReportAllocs()
@@ -157,6 +158,38 @@ func Benchmark_Fluent_Forward_Go_BytesAck(b *testing.B) {
 		}
 	}
 }
+
+// func Benchmark_Fluent_Forward_Go_BytesAck(b *testing.B) {
+// 	tagVar := "foo"
+
+// 	c := client.New(client.ConnectionOptions{
+// 		RequireAck:        true,
+// 		ConnectionTimeout: 3 * time.Second,
+// 	})
+
+// 	err := c.Connect()
+// 	if err != nil {
+// 		b.Fatal(err)
+// 	}
+
+// 	defer c.Disconnect()
+
+// 	record := bm.MakeRecord(12)
+// 	mne := protocol.NewMessage(tagVar, record)
+
+// 	mne.Chunk()
+// 	bits, _ := mne.MarshalMsg(nil)
+
+// 	b.ReportAllocs()
+// 	b.ResetTimer()
+
+// 	for i := 0; i < b.N; i++ {
+// 		err = c.SendRaw(bits)
+// 		if err != nil {
+// 			b.Fatal(err)
+// 		}
+// 	}
+// }
 
 func Benchmark_Fluent_Forward_Go_RawMessage(b *testing.B) {
 	tagVar := "foo"
@@ -171,6 +204,40 @@ func Benchmark_Fluent_Forward_Go_RawMessage(b *testing.B) {
 	}
 
 	defer c.Disconnect()
+
+	record := bm.MakeRecord(12)
+	mne := protocol.NewMessage(tagVar, record)
+
+	bits, _ := mne.MarshalMsg(nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		rbits := protocol.RawMessage(bits)
+		err = c.Send(rbits)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func Benchmark_Fluent_Forward_Go_RawMessage_Buffer(b *testing.B) {
+	tagVar := "foo"
+
+	c := client.NewBufferedClient(client.BufferedClientConnectionOptions{
+		ConnectionOptions: client.ConnectionOptions{
+			ConnectionTimeout: 3 * time.Second,
+		},
+	})
+
+	err := c.Connect()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	defer c.Disconnect()
+	defer c.Stop()
 
 	record := bm.MakeRecord(12)
 	mne := protocol.NewMessage(tagVar, record)

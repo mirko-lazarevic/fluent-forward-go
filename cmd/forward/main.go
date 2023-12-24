@@ -25,12 +25,15 @@ SOFTWARE.
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/IBM/fluent-forward-go/fluent/client"
 	"github.com/IBM/fluent-forward-go/fluent/protocol"
+	"github.com/tinylib/msgp/msgp"
 )
 
 var (
@@ -45,8 +48,11 @@ func init() {
 func main() {
 	flag.Parse()
 
-	c := client.New(client.ConnectionOptions{
-		RequireAck: true,
+	c := client.NewBufferedClient(client.BufferedClientConnectionOptions{
+		BufferSize: 32 * 1024, // 32 KB
+		ConnectionOptions: client.ConnectionOptions{
+			RequireAck: true,
+		},
 	})
 
 	err := c.Connect()
@@ -55,16 +61,16 @@ func main() {
 		os.Exit(-1)
 	}
 
-	record := map[string]interface{}{
-		"first": "Sir",
-		"last":  "Gawain",
-		"enemy": "Green Knight",
-		"equipment": []string{
-			"sword",
-			"lance",
-			"full plate",
-		},
-	}
+	// record := map[string]interface{}{
+	// 	"first": "Sir",
+	// 	"last":  "Gawain",
+	// 	"enemy": "Green Knight",
+	// 	"equipment": []string{
+	// 		"sword",
+	// 		"lance",
+	// 		"full plate",
+	// 	},
+	// }
 
 	entries := []protocol.EntryExt{
 		{
@@ -85,37 +91,57 @@ func main() {
 		},
 	}
 
-	err = c.SendMessage(tagVar, record)
+	packedForwardMessage, err := protocol.NewPackedForwardMessage("my.tag", entries)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error while creating packed forward message: %v\n", err)
 		os.Exit(1)
 	}
 
-	err = c.SendMessageExt(tagVar, record)
+	var buf bytes.Buffer
+	err = msgp.Encode(&buf, packedForwardMessage)
+
+	err = c.SendRaw(buf.Bytes())
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("Error SendRaw: %v", err)
 		os.Exit(1)
 	}
 
-	err = c.SendForward(tagVar, entries)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// err = c.SendMessage(tagVar, record)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
-	err = c.SendPacked(tagVar+".packed", entries)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// err = c.SendMessageExt(tagVar, record)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
-	err = c.SendCompressed(tagVar+".compressed", entries)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	// err = c.SendForward(tagVar, entries)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+
+	// err = c.SendPacked(tagVar+".packed", entries)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
+
+	// err = c.SendCompressed(tagVar+".compressed", entries)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	os.Exit(1)
+	// }
 
 	fmt.Println("Messages sent")
+
+	// c.Stop()
+	fmt.Println("Sleeping ...")
+	time.Sleep(60 * time.Second)
+	c.Stop()
 
 	os.Exit(0)
 }
