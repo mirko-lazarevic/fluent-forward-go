@@ -137,7 +137,7 @@ func New(opts ConnectionOptions) *Client {
 				avgTimeNs := float64(totalNs) / float64(count) // Average time per write in nanoseconds
 				avgTimeMs := float64(totalMs) / float64(count) // Average time per write in milliseconds
 
-				fmt.Printf("Total Bytes Written: %d, Total Kilobytes Written: %d, Average Time per Write: %.2f ns, %.2f ms, Total writes: %d \n", bytes, kilobytes, avgTimeNs, avgTimeMs, count)
+				fmt.Printf("**Default Client** Total Bytes Written: %d, Total Kilobytes Written: %d, Average Time per Write: %.2f ns, %.2f ms, Total writes: %d \n", bytes, kilobytes, avgTimeNs, avgTimeMs, count)
 
 			}
 		}
