@@ -2,7 +2,9 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/fluent-forward-go/fluent/protocol"
@@ -51,6 +53,26 @@ func NewBufferedClient(opts BufferedClientConnectionOptions) *BufferedClient {
 	if opts.FlushInterval == 0 {
 		opts.FlushInterval = defaultFlushInterval
 	}
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+
+		for {
+			select {
+			case <-ticker.C:
+				bytes := atomic.LoadInt64(&totalBytesWritten)
+				kilobytes := bytes / 1024
+				totalNs := atomic.LoadInt64(&totalWriteTimeNs)
+				totalMs := atomic.LoadInt64(&totalWriteTimeMs)
+				count := atomic.LoadInt64(&writeCount)
+				avgTimeNs := float64(totalNs) / float64(count) // Average time per write in nanoseconds
+				avgTimeMs := float64(totalMs) / float64(count) // Average time per write in milliseconds
+
+				fmt.Printf("Total Bytes Written: %d, Total Kilobytes Written: %d, Average Time per Write: %.2f ns, %.2f ms, Total writes: %d \n", bytes, kilobytes, avgTimeNs, avgTimeMs, count)
+
+			}
+		}
+	}()
 
 	bc := &BufferedClient{
 		Client: Client{
@@ -136,8 +158,18 @@ func (bc *BufferedClient) SendRaw(m []byte) error {
 		return errors.New("session handshake not completed")
 	}
 
+	// Start timing the write operation
+	startTime := time.Now()
+
 	// Write data to the buffer
-	_, err := bc.writer.Write(m)
+	n, err := bc.writer.Write(m)
+	// Update metrics
+	durationNs := time.Since(startTime).Nanoseconds() // Duration in nanoseconds
+	durationMs := durationNs / 1e6                    // Convert to milliseconds
+	atomic.AddInt64(&totalBytesWritten, int64(n))
+	atomic.AddInt64(&totalWriteTimeNs, durationNs)
+	atomic.AddInt64(&totalWriteTimeMs, durationMs)
+	atomic.AddInt64(&writeCount, 1)
 
 	return err
 }
