@@ -28,10 +28,8 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/IBM/fluent-forward-go/fluent/client/ws"
@@ -97,6 +95,7 @@ type DefaultWSConnectionFactory struct {
 	URL       string
 	AuthInfo  *IAMAuthInfo
 	TLSConfig *tls.Config
+	Header    http.Header
 }
 
 func (wcf *DefaultWSConnectionFactory) New() (ext.Conn, error) {
@@ -105,8 +104,15 @@ func (wcf *DefaultWSConnectionFactory) New() (ext.Conn, error) {
 		header = http.Header{}
 	)
 
+	// set additional custom headers. here we do not validate
+	// header names and values. Caller should make sure the
+	// headers provided are not conflict with protocols
+	if wcf.Header != nil {
+		header = wcf.Header
+	}
+
 	if wcf.AuthInfo != nil && len(wcf.AuthInfo.IAMToken()) > 0 {
-		header.Add(AuthorizationHeader, wcf.AuthInfo.IAMToken())
+		header.Set(AuthorizationHeader, wcf.AuthInfo.IAMToken())
 	}
 
 	if wcf.TLSConfig != nil {
@@ -115,15 +121,16 @@ func (wcf *DefaultWSConnectionFactory) New() (ext.Conn, error) {
 
 	conn, resp, err := dialer.Dial(wcf.URL, header)
 	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
+
 		bodyBytes, readErr := io.ReadAll(resp.Body)
-		if readErr == nil {
-			bodyString := string(bodyBytes)
-			if resp.StatusCode >= 300 {
-				err = fmt.Errorf("%s. %s:%s", err, strconv.Itoa(resp.StatusCode), bodyString)
-			}
+		if readErr != nil {
+			err = readErr
 		}
 
-		resp.Body.Close()
+		if resp.StatusCode >= 300 {
+			err = NewWSConnError(err, resp.StatusCode, string(bodyBytes))
+		}
 	}
 
 	return conn, err

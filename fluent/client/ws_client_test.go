@@ -64,6 +64,8 @@ var _ = Describe("DefaultWSConnectionFactory", func() {
 		svr               *httptest.Server
 		ch                chan struct{}
 		useTLS, testError bool
+		testHeaders       http.Header
+		customErr         *client.WSConnError
 	)
 
 	happyHandler := func(ch chan struct{}) http.Handler {
@@ -76,6 +78,11 @@ var _ = Describe("DefaultWSConnectionFactory", func() {
 
 			header := r.Header.Get(fclient.AuthorizationHeader)
 			Expect(header).To(Equal("oi"))
+
+			for k := range testHeaders {
+				v := r.Header.Get(k)
+				Expect(v).To(Equal(testHeaders[k][0]))
+			}
 
 			svrConnection, err := ws.NewConnection(wc, svrOpts)
 			if err != nil {
@@ -110,6 +117,7 @@ var _ = Describe("DefaultWSConnectionFactory", func() {
 
 	AfterEach(func() {
 		svr.Close()
+		testHeaders = nil
 	})
 
 	It("sends auth headers", func() {
@@ -122,6 +130,31 @@ var _ = Describe("DefaultWSConnectionFactory", func() {
 					InsecureSkipVerify: true,
 				},
 				AuthInfo: NewIAMAuthInfo("oi"),
+			},
+		})
+
+		Expect(cli.Connect()).ToNot(HaveOccurred())
+		Eventually(ch).Should(Receive())
+		Expect(cli.Disconnect()).ToNot(HaveOccurred())
+	})
+
+	It("sends auth headers with additional header", func() {
+		u := "ws" + strings.TrimPrefix(svr.URL, "http")
+
+		testHeaders = http.Header{
+			"User-Agent": []string{"xxxx:1.0.5"}, // user agent
+			"X-a":        []string{""},           // empty value
+			"X-b":        []string{"value"},      // some string value
+		}
+
+		cli := fclient.NewWS(client.WSConnectionOptions{
+			Factory: &client.DefaultWSConnectionFactory{
+				URL: u,
+				TLSConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+				AuthInfo: NewIAMAuthInfo("oi"),
+				Header:   testHeaders,
 			},
 		})
 
@@ -151,7 +184,12 @@ var _ = Describe("DefaultWSConnectionFactory", func() {
 
 			err := cli.Connect()
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("websocket: bad handshake. 500:broken test"))
+
+			Expect(errors.As(err, &customErr)).To(BeTrue())
+			Expect(customErr.StatusCode).To(Equal(http.StatusInternalServerError))
+			Expect(customErr.ConnErr.Error()).To(ContainSubstring("websocket: bad handshake"))
+			Expect(customErr.ResponseBody).To(ContainSubstring("broken test"))
+			Expect(customErr.IsRetryable()).To(BeTrue())
 		})
 
 	})
